@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>color golf</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="match the color in as few tries as you can">
+<meta name="theme-color" content="#000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta property="og:title" content="color golf">
+<meta property="og:description" content="match the color in as few tries as you can">
+<meta property="og:image" content="https://dglittle.github.io/colorgolf/icon.png">
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: #000; overscroll-behavior: none; }
+body { font-family: -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif; user-select: none; -webkit-user-select: none; }
+button { font: inherit; border: 0; cursor: pointer; touch-action: manipulation; }
+
+/* the "phone": fills small screens, stays phone-shaped on big ones */
+#app { position: relative; margin: 0 auto; width: 100%; max-width: 480px; height: 100%; overflow: hidden; background: #fff; }
+@media (min-width: 600px) and (min-height: 700px) {
+    body { display: flex; align-items: center; justify-content: center; background: #222; }
+    #app { width: 430px; height: 860px; max-height: 96vh; border-radius: 40px; box-shadow: 0 10px 60px #000a; }
+}
+#app { --u: calc(var(--w, 400px) / 100); }  /* 1u = 1% of the phone's width, set by fit() */
+
+/* ---- home ---- */
+.home { height: 100%; display: flex; flex-direction: column; align-items: center; padding: calc(var(--u) * 6); padding-top: max(env(safe-area-inset-top), calc(var(--u) * 6)); overflow-y: auto; }
+.title { margin: auto 0 calc(var(--u) * 8); font-size: calc(var(--u) * 11); font-weight: 800; letter-spacing: -0.03em; display: flex; align-items: center; gap: calc(var(--u) * 2); }
+.title i { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; background: #ff73c6; box-shadow: inset 0 -0.4em 0 #1c5b21; }
+.cards { width: 100%; display: flex; gap: calc(var(--u) * 4); margin-bottom: auto; align-items: flex-start; }
+.card { background: #f2f2f2; border-radius: calc(var(--u) * 3); padding: calc(var(--u) * 4); }
+.card h2 { margin: 0 0 calc(var(--u) * 2); font-size: calc(var(--u) * 4.2); font-weight: 600; }
+.left { flex: 1; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 3); }
+.left h2 { margin: 0; }
+.right { flex: 1; display: flex; flex-direction: column; gap: calc(var(--u) * 4); }
+.score { color: #1a73e8; font-size: calc(var(--u) * 3.6); }
+.bubbles { display: grid; grid-template-columns: repeat(3, calc(var(--u) * 9)); gap: calc(var(--u) * 2.5); }
+.bubble { width: calc(var(--u) * 9); height: calc(var(--u) * 9); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: calc(var(--u) * 4.5); }
+.btn { padding: calc(var(--u) * 2.6) calc(var(--u) * 5); border-radius: calc(var(--u) * 2.5); color: #fff; background: #1a73e8; font-size: calc(var(--u) * 4); transition: transform .08s; }
+.btn:active { transform: scale(.95); }
+.btn.green { background: #34a853; }
+.best { font-size: calc(var(--u) * 9); font-weight: 800; }
+.stars { display: grid; grid-template-columns: repeat(7, 1fr); line-height: 1; font-size: calc(var(--u) * 3.6); text-align: center; }
+.bigstars { position: relative; height: calc(var(--u) * 10); margin-top: calc(var(--u) * 1); }
+.bigstars span { position: absolute; top: 0; font-size: calc(var(--u) * 10); line-height: 1; }
+
+/* ---- game ---- */
+.game { height: 100%; background: #000; color: #fff; display: flex; flex-direction: column; position: relative; }
+.goal { height: 33.333%; flex: none; transition: background .4s; }
+.ball { position: absolute; left: 50%; top: 33.333%; width: calc(var(--u) * 25); height: calc(var(--u) * 25); margin: calc(var(--u) * -12.5) 0 0 calc(var(--u) * -12.5); border-radius: 50%; transition: background .35s; }
+.ball.sink { animation: sink .6s ease-out; }
+@keyframes sink { 0% { transform: scale(1) } 40% { transform: scale(1.15) } 100% { transform: scale(1) } }
+.below { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; padding: calc(var(--u) * 14) calc(var(--u) * 4) max(env(safe-area-inset-bottom), calc(var(--u) * 4)); }
+.info { text-align: center; font-size: calc(var(--u) * 4); line-height: 1.6; }
+.info b { font-size: calc(var(--u) * 4.4); }
+.rows { display: flex; flex-direction: column; gap: calc(var(--u) * 2.5); touch-action: none; }
+.row { display: flex; gap: calc(var(--u) * 1.6); }
+.sw { width: calc(var(--u) * 10.5); height: calc(var(--u) * 10.5); border-radius: calc(var(--u) * 1.6); border: calc(var(--u) * 0.8) solid #000; outline: calc(var(--u) * 0.6) solid #555; padding: 0; }
+.sw.on { outline-color: #fff; }
+.done .sw { outline-color: #000; }
+.done .sw.on { outline-color: #fff; }
+.wbtn { padding: calc(var(--u) * 3) calc(var(--u) * 6); border-radius: calc(var(--u) * 2.5); background: #fff; color: #000; font-size: calc(var(--u) * 4); transition: transform .08s; }
+.wbtn:active { transform: scale(.95); }
+.wbtn.quiet { background: #333; color: #ccc; }
+.over { text-align: center; }
+.over div:first-child { font-size: calc(var(--u) * 6); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+
+// color golf: a color is 3 shades (red, green, blue), each one of 7 values.
+// you get 6 tries per color, 9 colors per game, and your score is the total
+// number of tries, like golf: lower is better.
+
+var values = [0, 43, 86, 129, 172, 215, 255]
+var num_rounds = 9
+var max_attempts = 6
+
+var app = document.getElementById('app')
+var state = load()
+
+function load() {
+    try { var s = JSON.parse(localStorage.colorgolf) } catch (e) {}
+    return s || { rounds: [], best: null, holes_in_one: [], view: 'home' }
+}
+function save() { try { localStorage.colorgolf = JSON.stringify(state) } catch (e) {} }
+
+function css(c) { return 'rgb(' + c.join(',') + ')' }
+function same(a, b) { return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] }
+function dark(c) { return c[0] * .299 + c[1] * .587 + c[2] * .114 < 128 }
+function rand_color() { return [0, 1, 2].map(function () { return values[Math.floor(Math.random() * values.length)] }) }
+
+// "shades away" = how many clicks you'd need to fix your color
+function shades_away(a, b) {
+    var sum = 0
+    for (var i = 0; i < 3; i++) sum += Math.abs(values.indexOf(a[i]) - values.indexOf(b[i]))
+    return sum
+}
+
+function round_done(r) { return r.attempts >= max_attempts || same(r.last, r.color) }
+function score() { return state.rounds.reduce(function (s, r) { return s + r.attempts }, 0) }
+function game_done() { var n = state.rounds.length; return n == num_rounds && round_done(state.rounds[n - 1]) }
+
+function new_round() {
+    var color = rand_color()
+    var start = same(color, [0, 0, 0]) ? [255, 255, 255] : [0, 0, 0]
+    state.rounds.push({ color: color, last: start.slice(), guess: start.slice(), attempts: 0 })
+}
+
+function guess() {
+    var r = state.rounds[state.rounds.length - 1]
+    if (round_done(r)) {
+        if (state.rounds.length < num_rounds) new_round()
+        else state.view = 'home'
+    } else {
+        r.last = r.guess.slice()
+        r.attempts++
+        if (round_done(r) && r.attempts == 1) state.holes_in_one.push(r.color)
+        if (game_done() && (state.best == null || score() < state.best)) state.best = score()
+    }
+    save()
+    draw()
+}
+
+// ---- drawing ----
+
+function h(tag, attrs, kids) {
+    var e = document.createElement(tag)
+    for (var k in attrs || {}) {
+        if (k == 'style') Object.assign(e.style, attrs.style)
+        else if (k.slice(0, 2) == 'on') e[k] = attrs[k]
+        else e.setAttribute(k, attrs[k])
+    }
+    ;[].concat(kids == null ? [] : kids).forEach(function (c) {
+        if (c != null) e.append(c.nodeType ? c : document.createTextNode(c))
+    })
+    return e
+}
+
+function draw() {
+    app.innerHTML = ''
+    app.append(state.view == 'game' && state.rounds.length ? draw_game() : draw_home())
+}
+
+function draw_home() {
+    var left = h('div', { class: 'card left' })
+    if (state.rounds.length) {
+        left.append(h('h2', {}, 'current game'),
+            h('div', { class: 'score' }, (game_done() ? 'final' : 'current') + ' score: ' + score()))
+        var bubbles = h('div', { class: 'bubbles' })
+        for (var i = 0; i < num_rounds; i++) {
+            var r = state.rounds[i]
+            bubbles.append(r ? h('div', { class: 'bubble', style: { background: css(r.color), color: dark(r.color) ? '#fff' : '#000' } },
+                round_done(r) ? '' + r.attempts : '…') : h('div', { class: 'bubble' }))
+        }
+        left.append(bubbles)
+        if (!game_done()) left.append(h('button', { class: 'btn', onclick: function () { state.view = 'game'; save(); draw() } }, 'continue game'))
+    }
+    left.append(h('button', { class: 'btn green', onclick: function () {
+        state.rounds = []
+        new_round()
+        state.view = 'game'
+        save()
+        draw()
+    } }, 'new game'))
+
+    // 49 small stars, and a big star for every 50th hole in one
+    var hio = state.holes_in_one, sets = Math.floor(Math.max(0, hio.length - 1) / 50), base = sets * 50
+    function star(i) { return h('span', { style: { color: i < hio.length ? css(hio[i]) : '#d0d0d0' } }, '★') }
+    var stars = h('div', { class: 'stars' })
+    for (var i = 0; i < 49; i++) stars.append(star(base + i))
+    var big = h('div', { class: 'bigstars' })
+    for (var s = 0; s <= sets; s++) {
+        var b = star(s * 50 + 49)
+        b.style.left = sets ? 'calc(' + (s / sets) + ' * (100% - 1em))' : 'calc(50% - .5em)'
+        big.append(b)
+    }
+
+    return h('div', { class: 'home' }, [
+        h('div', { class: 'title' }, [h('i'), 'colorgolf']),
+        h('div', { class: 'cards' }, [
+            left,
+            h('div', { class: 'right' }, [
+                h('div', { class: 'card' }, [h('h2', {}, 'best score'), h('div', { class: 'best' }, state.best == null ? '--' : '' + state.best)]),
+                h('div', { class: 'card' }, [h('h2', {}, 'holes in one'), stars, big])
+            ])
+        ])
+    ])
+}
+
+var last_drawn = null
+function draw_game() {
+    var r = state.rounds[state.rounds.length - 1], done = round_done(r), won = same(r.last, r.color)
+
+    var ball = h('div', { class: 'ball', style: { background: css(last_drawn || r.last) } })
+    var sink = won && last_drawn && !same(last_drawn, r.last)
+    requestAnimationFrame(function () { ball.style.background = css(r.last); if (sink) ball.classList.add('sink') })
+    last_drawn = r.last.slice()
+
+    var status = won ? (r.attempts == 1 ? [h('span', {}, 'hole in one! '), h('span', { style: { color: css(r.color) } }, '★')] : 'you matched the color in ' + r.attempts + ' tries!')
+        : done ? 'color not matched.'
+        : shades_away(r.last, r.color) + ' shades away'
+
+    var rows = h('div', { class: 'rows' + (done ? ' done' : '') })
+    ;[0, 1, 2].forEach(function (ch) {
+        var row = h('div', { class: 'row' })
+        values.forEach(function (v) {
+            var c = [0, 0, 0]
+            c[ch] = v
+            var show = !done || v == r.color[ch]   // when the round ends, only the answer stays lit
+            row.append(h('button', { class: 'sw' + (r.guess[ch] == v ? ' on' : ''), 'data-ch': ch, 'data-v': v,
+                style: { background: show ? css(c) : '#000' } }))
+        })
+        rows.append(row)
+    })
+    if (!done) slide(rows, function (ch, v) {
+        if (r.guess[ch] == v) return
+        r.guess[ch] = v
+        save()
+        rows.querySelectorAll('[data-ch="' + ch + '"]').forEach(function (b) { b.classList.toggle('on', b.dataset.v == v) })
+    })
+
+    var action = game_done() ? h('div', { class: 'over' }, [h('div', {}, 'game over'), h('div', {}, 'final score: ' + score())])
+        : h('button', { class: 'wbtn', onclick: guess }, done ? 'next color' : 'swing')
+
+    return h('div', { class: 'game' }, [
+        h('div', { class: 'goal', style: { background: css(r.color) } }),
+        ball,
+        h('div', { class: 'below' }, [
+            h('div', { class: 'info' }, [
+                h('div', {}, 'color ' + state.rounds.length + ' of ' + num_rounds + (done ? '' : ' · try ' + (r.attempts + 1) + ' of ' + max_attempts)),
+                h('b', {}, status)
+            ]),
+            rows,
+            action,
+            h('button', { class: 'wbtn quiet', onclick: function () { state.view = 'home'; save(); draw() } }, 'menu')
+        ])
+    ])
+}
+
+// tap or drag along a row of swatches
+function slide(rows, cb) {
+    function at(e) {
+        var t = e.touches ? e.touches[0] : e
+        var el = document.elementFromPoint(t.clientX, t.clientY)
+        return el && el.dataset && el.dataset.ch != null ? el : null
+    }
+    var ch = null
+    function down(e) {
+        var el = at(e)
+        if (!el) return
+        e.preventDefault()
+        ch = el.dataset.ch
+        cb(+ch, +el.dataset.v)
+    }
+    function move(e) {
+        if (ch == null) return
+        var el = at(e)
+        if (el && el.dataset.ch == ch) cb(+ch, +el.dataset.v)
+    }
+    function up() { ch = null }
+    rows.addEventListener('pointerdown', down)
+    rows.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+}
+
+function fit() { app.style.setProperty('--w', app.clientWidth + 'px') }
+window.addEventListener('resize', fit)
+fit()
+draw()
+
+</script>
+</body>
+</html>
