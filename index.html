@@ -52,11 +52,15 @@ button { font: inherit; border: 0; cursor: pointer; touch-action: manipulation; 
 
 /* ---- game ---- */
 .game { height: 100%; background: #000; color: #fff; display: flex; flex-direction: column; position: relative; }
-.goal { height: 33.333%; flex: none; transition: background .4s; }
-.ball { position: absolute; left: 50%; top: 33.333%; width: calc(var(--u) * 25); height: calc(var(--u) * 25); margin: calc(var(--u) * -12.5) 0 0 calc(var(--u) * -12.5); border-radius: 50%; transition: background .35s; }
+.goal { height: 33.333%; flex: none; position: relative; z-index: 1; }
+.hole, .ball { position: absolute; width: calc(var(--u) * 20); height: calc(var(--u) * 20); margin: calc(var(--u) * -10) 0 0 calc(var(--u) * -10); border-radius: 50%; }
+.hole { left: 50%; top: 50%; background: #000; }
 .ball.sink { animation: sink .6s ease-out; }
 @keyframes sink { 0% { transform: scale(1) } 40% { transform: scale(1.15) } 100% { transform: scale(1) } }
-.below { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; padding: calc(var(--u) * 14) calc(var(--u) * 4) max(env(safe-area-inset-bottom), calc(var(--u) * 4)); }
+.below > * { transition: opacity .15s; }
+.putting .below > * { opacity: 0; pointer-events: none; }
+.fly { position: absolute; box-sizing: border-box; border: 2px solid #fff; mix-blend-mode: screen; z-index: 2; }
+.below { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; padding: calc(var(--u) * 6) calc(var(--u) * 4) max(env(safe-area-inset-bottom), calc(var(--u) * 4)); }
 .info { text-align: center; font-size: calc(var(--u) * 4); line-height: 1.6; }
 .info b { font-size: calc(var(--u) * 4.4); }
 .rows { display: flex; flex-direction: column; gap: calc(var(--u) * 2.5); touch-action: none; }
@@ -131,19 +135,33 @@ function new_round() {
     state.rounds.push({ color: color, last: start.slice(), guess: start.slice(), attempts: 0 })
 }
 
-function guess() {
-    var r = state.rounds[state.rounds.length - 1]
-    if (round_done(r)) {
-        if (state.rounds.length < num_rounds) new_round()
-        else state.view = 'home'
-    } else {
-        r.last = r.guess.slice()
-        r.attempts++
-        if (round_done(r) && r.attempts == 1) state.holes_in_one.push(r.color)
-        if (game_done() && (state.best == null || score() < state.best)) state.best = score()
-    }
+function next_color() {
+    if (state.rounds.length < num_rounds) new_round()
+    else state.view = 'home'
     save()
     draw()
+}
+
+// a swing: the ball stops shades_away / 18 of the way from the hole to the goal's corner, in a random direction.
+// x and y are fractions of the goal's width and height, measured from its center.
+function swing_to(r, x, y) {
+    r.last = r.guess.slice()
+    r.x = x
+    r.y = y
+    r.attempts++
+    if (round_done(r) && r.attempts == 1) state.holes_in_one.push(r.color)
+    if (game_done() && (state.best == null || score() < state.best)) state.best = score()
+    save()
+}
+
+function landing(d, w, h, rad) {
+    var X = w / 2 - rad, Y = h / 2 - rad, dist = d / 18 * Math.hypot(X, Y)
+    for (var i = 0; i < 200; i++) {
+        var a = Math.random() * Math.PI * 2, x = dist * Math.cos(a), y = dist * Math.sin(a)
+        if (Math.abs(x) <= X && Math.abs(y) <= Y) return [x / w, y / h]
+    }
+    var a = Math.random() < .5 ? 1 : -1, b = Math.random() < .5 ? 1 : -1   // only the corners are that far
+    return [a * X / w, b * Y / h]
 }
 
 // ---- drawing ----
@@ -213,14 +231,17 @@ function draw_home() {
     ])
 }
 
-var last_drawn = null
+var sink_next = false
 function draw_game() {
     var r = state.rounds[state.rounds.length - 1], done = round_done(r), won = same(r.last, r.color)
 
-    var ball = h('div', { class: 'ball', style: { background: css(last_drawn || r.last) } })
-    var sink = won && last_drawn && !same(last_drawn, r.last)
-    requestAnimationFrame(function () { ball.style.background = css(r.last); if (sink) ball.classList.add('sink') })
-    last_drawn = r.last.slice()
+    var goal = h('div', { class: 'goal', style: { background: css(r.color) } })
+    var hole = h('div', { class: 'hole' })
+    var ball = h('div', { class: 'ball' + (sink_next ? ' sink' : ''), style: { background: css(r.last),
+        left: (50 + 100 * (r.x || 0)) + '%', top: (50 + 100 * (r.y || 0)) + '%' } })
+    sink_next = false
+    if (!won) goal.append(hole)
+    if (r.attempts) goal.append(ball)
 
     var status = won ? (r.attempts == 1 ? [h('span', {}, 'hole in one! '), h('span', { style: { color: css(r.color) } }, '★')] : 'you matched the color in ' + r.attempts + ' tries!')
         : done ? 'color not matched.'
@@ -245,22 +266,61 @@ function draw_game() {
         rows.querySelectorAll('[data-ch="' + ch + '"]').forEach(function (b) { b.classList.toggle('on', b.dataset.v == v) })
     })
 
+    var game = h('div', { class: 'game' })
     var action = game_done() ? h('div', { class: 'over' }, [h('div', {}, 'game over'), h('div', {}, 'final score: ' + score())])
-        : h('button', { class: 'wbtn', onclick: guess }, done ? 'next color' : 'swing')
+        : h('button', { class: 'wbtn', onclick: done ? next_color : function () { putt(game, goal, hole, rows, r) } }, done ? 'next color' : 'swing')
 
-    return h('div', { class: 'game' }, [
-        h('div', { class: 'goal', style: { background: css(r.color) } }),
-        ball,
-        h('div', { class: 'below' }, [
-            h('div', { class: 'info' }, [
-                h('div', {}, 'color ' + state.rounds.length + ' of ' + num_rounds + (done ? '' : ' · try ' + (r.attempts + 1) + ' of ' + max_attempts)),
-                h('b', {}, status)
-            ]),
-            rows,
-            action,
-            h('button', { class: 'wbtn quiet', onclick: function () { state.view = 'home'; save(); draw() } }, 'menu')
-        ])
-    ])
+    game.append(goal, h('div', { class: 'below' }, [
+        h('div', { class: 'info' }, [
+            h('div', {}, 'color ' + state.rounds.length + ' of ' + num_rounds + (done ? '' : ' · try ' + (r.attempts + 1) + ' of ' + max_attempts)),
+            h('b', {}, status)
+        ]),
+        rows,
+        action,
+        h('button', { class: 'wbtn quiet', onclick: function () { state.view = 'home'; save(); draw() } }, 'menu')
+    ]))
+    return game
+}
+
+// the swing animation (from the 2025 app): the three chosen shades fly together and add up into your color,
+// then the ball shoots up into the goal and rolls to a stop, as far from the hole as you are shades away
+var putting = false
+function putt(game, goal, hole, rows, r) {
+    if (putting) return
+    var G = game.getBoundingClientRect(), gr = goal.getBoundingClientRect(), R = rows.getBoundingClientRect()
+    var size = hole.offsetWidth, d = shades_away(r.guess, r.color)
+    var to = d ? landing(d, gr.width, gr.height, size / 2) : [0, 0]
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { swing_to(r, to[0], to[1]); sink_next = !d; return draw() }
+    putting = true
+    game.classList.add('putting')
+    var cx = R.left + R.width / 2 - G.left, cy = R.top + R.height / 2 - G.top
+    var flies = [0, 1, 2].map(function (ch) {
+        var b = rows.querySelector('.sw.on[data-ch="' + ch + '"]').getBoundingClientRect(), c = [0, 0, 0]
+        c[ch] = r.guess[ch]
+        var f = h('div', { class: 'fly', style: { background: css(c) } })
+        game.append(f)
+        f.animate([
+            { left: b.left - G.left + 'px', top: b.top - G.top + 'px', width: b.width + 'px', height: b.height + 'px', borderRadius: '12%', borderColor: '#fff' },
+            { left: cx - size / 2 + 'px', top: cy - size / 2 + 'px', width: size + 'px', height: size + 'px', borderRadius: '50%', borderColor: 'transparent' }
+        ], { duration: 600, easing: 'ease-in-out', fill: 'forwards' })
+        return f
+    })
+    setTimeout(function () {
+        flies.forEach(function (f) { f.remove() })
+        var ball = h('div', { class: 'ball', style: { background: css(r.guess) } })
+        goal.append(ball)
+        var x0 = cx - (gr.left - G.left), y0 = cy - (gr.top - G.top)
+        ball.animate([
+            { left: x0 + 'px', top: y0 + 'px' },
+            { left: gr.width * (.5 + to[0]) + 'px', top: gr.height * (.5 + to[1]) + 'px' }
+        ], { duration: 300, easing: 'ease-out', fill: 'forwards' })
+        setTimeout(function () {
+            putting = false
+            swing_to(r, to[0], to[1])
+            sink_next = !d
+            draw()
+        }, 320)
+    }, 600)
 }
 
 // tap or drag along a row of swatches
