@@ -44,6 +44,8 @@ button { font: inherit; border: 0; cursor: pointer; touch-action: manipulation; 
 .btn:active { transform: scale(.95); }
 .btn.green { background: #34a853; }
 .best { font-size: calc(var(--u) * 9); font-weight: 800; }
+.old { font-size: calc(var(--u) * 3); color: #777; margin-top: calc(var(--u) * 1); }
+.stars, .bigstars { text-shadow: 0 0 1px #0007; }
 .stars { display: grid; grid-template-columns: repeat(7, 1fr); line-height: 1; font-size: calc(var(--u) * 3.6); text-align: center; }
 .bigstars { position: relative; height: calc(var(--u) * 10); margin-top: calc(var(--u) * 1); }
 .bigstars span { position: absolute; top: 0; font-size: calc(var(--u) * 10); line-height: 1; }
@@ -87,7 +89,23 @@ var state = load()
 
 function load() {
     try { var s = JSON.parse(localStorage.colorgolf) } catch (e) {}
-    return s || { rounds: [], best: null, holes_in_one: [], view: 'home' }
+    s = s || { rounds: [], best: null, holes_in_one: [], view: 'home' }
+    if (!s.imported_2014) import_2014(s)
+    return s
+}
+
+// the 2014 version (same origin, dglittle.github.io) kept its stats in localStorage.colorGolf:
+// { stats: { bestScore, holesInOne: [[r, g, b], ...] } }, with shades 0, 42, 85, 127, 170, 212, 255.
+// its holes in one come first (they happened first); its best score was over 10 colors, so it's kept apart.
+function import_2014(s) {
+    s.imported_2014 = true
+    try { var old = JSON.parse(localStorage.colorGolf).stats } catch (e) {}
+    if (!old) return
+    var shade = function (v) { return values[Math.round(v / 255 * 6)] }
+    var hio = (old.holesInOne || []).filter(function (c) { return c && c.length == 3 })
+    s.holes_in_one = hio.map(function (c) { return c.map(shade) }).concat(s.holes_in_one)
+    if (old.bestScore) s.best_2014 = old.bestScore
+    try { localStorage.colorgolf = JSON.stringify(s) } catch (e) {}
 }
 function save() { try { localStorage.colorgolf = JSON.stringify(state) } catch (e) {} }
 
@@ -187,7 +205,8 @@ function draw_home() {
         h('div', { class: 'cards' }, [
             left,
             h('div', { class: 'right' }, [
-                h('div', { class: 'card' }, [h('h2', {}, 'best score'), h('div', { class: 'best' }, state.best == null ? '--' : '' + state.best)]),
+                h('div', { class: 'card' }, [h('h2', {}, 'best score'), h('div', { class: 'best' }, state.best == null ? '--' : '' + state.best),
+                    state.best_2014 ? h('div', { class: 'old' }, 'best in 2014 (10 colors): ' + state.best_2014) : null]),
                 h('div', { class: 'card' }, [h('h2', {}, 'holes in one'), stars, big])
             ])
         ])
