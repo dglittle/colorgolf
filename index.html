@@ -44,6 +44,7 @@ button { font: inherit; border: 0; cursor: pointer; touch-action: manipulation; 
 .btn:active { transform: scale(.95); }
 .btn.green { background: #34a853; }
 .best { font-size: calc(var(--u) * 9); font-weight: 800; }
+.version { margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 2.8); color: #bbb; }
 .old { font-size: calc(var(--u) * 3); color: #777; margin-top: calc(var(--u) * 1); }
 .stars, .bigstars { text-shadow: 0 0 1px #0007; }
 .stars { display: grid; grid-template-columns: repeat(7, 1fr); line-height: 1; font-size: calc(var(--u) * 3.6); text-align: center; }
@@ -89,6 +90,7 @@ var values = [0, 43, 86, 129, 172, 215, 255]
 var num_rounds = 9
 var max_attempts = 6
 
+var VERSION = 'v0.6 · Oct 29'     // shown small on the home screen; bump it with each change
 var app = document.getElementById('app')
 var state = load()
 
@@ -228,7 +230,8 @@ function draw_home() {
                     state.best_2014 ? h('div', { class: 'old' }, 'best in 2014 (10 colors): ' + state.best_2014) : null]),
                 h('div', { class: 'card' }, [h('h2', {}, 'holes in one'), stars, big])
             ])
-        ])
+        ]),
+        h('div', { class: 'version' }, VERSION)
     ])
 }
 
@@ -295,9 +298,7 @@ function putt(game, goal, hole, rows, r) {
     putting = true
     game.classList.add('putting')
     var cx = R.left + R.width / 2 - G.left, cy = R.top + R.height / 2 - G.top
-    // a match: the ball forms where every sink animation starts its flight (75/390 of the width below the goal), then one plays
     var sink = !d && pick_sink()
-    if (sink) cy = gr.bottom - G.top + 75 * gr.width / 390
     var flies = [0, 1, 2].map(function (ch) {
         var b = rows.querySelector('.sw.on[data-ch="' + ch + '"]').getBoundingClientRect(), c = [0, 0, 0]
         c[ch] = r.guess[ch]
@@ -310,11 +311,20 @@ function putt(game, goal, hole, rows, r) {
         return f
     })
     setTimeout(function () {
-        if (sink) return play_sink(sink, game, goal, flies, r, function () {
-            putting = false
-            swing_to(r, 0, 0)
-            draw()
-        })
+        if (sink) {
+            // a match: the ball rises from where it formed to where every sink animation starts its flight (75/390 of the width
+            // below the goal), speeding up so it arrives at the speed the animation's flight starts with; then the animation plays
+            flies.forEach(function (f) { f.remove() })
+            var sc = gr.width / 390, y1 = gr.bottom - G.top + 75 * sc, dist = cy - y1, v = 3 * 215.5 * sc / sink.set.FLY
+            var ball = h('div', { class: 'fly', style: { background: css(r.guess), border: '0', borderRadius: '50%',
+                left: cx - size / 2 + 'px', top: cy - size / 2 + 'px', width: size + 'px', height: size + 'px' } })
+            game.append(ball)
+            var go = function () { play_sink(sink, game, goal, [ball], r, function () { putting = false; swing_to(r, 0, 0); draw() }) }
+            if (dist <= 1) return go()
+            var ms = 2 * dist / v * 1000                            // ease-in (x²): ends at speed 2·dist/time = v
+            ball.animate([{ top: cy - size / 2 + 'px' }, { top: y1 - size / 2 + 'px' }], { duration: ms, easing: 'cubic-bezier(.333, 0, .667, .333)', fill: 'forwards' })
+            return setTimeout(go, ms)
+        }
         flies.forEach(function (f) { f.remove() })
         var ball = h('div', { class: 'ball', style: { background: css(r.guess) } })
         goal.append(ball)
